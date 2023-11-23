@@ -1,24 +1,33 @@
-namespace famazo.HotelManagementApp.Model;
+using famazo.HotelManagementApp.backend.Model;
+using famazo.HotelManagementApp.Controller;
+using famazo.HotelManagementApp.Model;
 
-public class Hotel
+namespace famazo.HotelManagementApp.backend.Controller;
+
+public class HotelManager : IHotelManager
 {
-    public List<Room> HotelRooms { get; }
-    public List<Guest> HotelGuests { get; set; }
+    private readonly Hotel _hotel;
 
-    public Hotel(List<Room> rooms)
+    public HotelManager(Hotel hotel)
     {
-        HotelRooms = rooms;
+        _hotel = hotel;
     }
-
+    
     public int GetOccupancy()
     {
-        IEnumerable<Room> occupiedRooms = HotelRooms.Where(room => room.Occupied);
-        return occupiedRooms.Count() * 100 / HotelRooms.Count;
+        IEnumerable<Room> occupiedRooms = _hotel.HotelRooms.Where(room => room.CheckAvailability(new Stay(DateTime.Today, DateTime.Today)));
+        return occupiedRooms.Count() * 100 / _hotel.HotelRooms.Count;
+    }
+
+    public int GetOccupancy(DateTime date)
+    {
+        IEnumerable<Room> occupiedRooms = _hotel.HotelRooms.Where(room => room.CheckAvailability(new Stay(date, date)));
+        return occupiedRooms.Count() * 100 / _hotel.HotelRooms.Count;
     }
 
     private Room? TryToPlaceGuest(Guest guest)
     {
-        IEnumerable<Room> freeRooms = HotelRooms.Where(room => !room.Occupied);
+        IEnumerable<Room> freeRooms = _hotel.HotelRooms.Where(room => room.CheckAvailability(guest.GuestStay));
         List<Room> freeRoomList = freeRooms.ToList();
         if (freeRoomList.Any())
         {
@@ -26,7 +35,7 @@ public class Hotel
             try
             {
                 Room selectedRoom = freeRoomList.First(room => room.Type == guest.PreferredRoomType);
-                selectedRoom.Occupied = true;
+                selectedRoom.BookRoom(guest.GuestStay);
                 return selectedRoom;
             }
             catch (Exception e)
@@ -37,7 +46,7 @@ public class Hotel
                     try
                     {
                         Room selectedRoom = freeRoomList.First(room => room.Type != RoomType.Suit);
-                        selectedRoom.Occupied = true;
+                        selectedRoom.BookRoom(guest.GuestStay);
                         selectedRoom.PricePerNight *= (decimal)0.8;
                         return selectedRoom;
                     }
@@ -46,8 +55,8 @@ public class Hotel
                         // select first available Suit
                         if (e2.InnerException is ArgumentNullException)
                         {
-                            Room selectedRoom = freeRoomList.First(room => room.Occupied);
-                            selectedRoom.Occupied = true;
+                            Room selectedRoom = freeRoomList.First(room => room.CheckAvailability(guest.GuestStay));
+                            selectedRoom.BookRoom(guest.GuestStay);
                             selectedRoom.PricePerNight *= (decimal)0.5;
                             return selectedRoom;
                         }
@@ -73,5 +82,10 @@ public class Hotel
         {
             Console.WriteLine($"Welcome! We have a {room.Type} room for you for a price of {room.PricePerNight} per night.");
         }
+    }
+
+    public Dictionary<GuestType, Stay> GetCurrentStays()
+    {
+        return _hotel.HotelGuests.ToDictionary(guest => guest.Type, guest => guest.GuestStay);
     }
 }
